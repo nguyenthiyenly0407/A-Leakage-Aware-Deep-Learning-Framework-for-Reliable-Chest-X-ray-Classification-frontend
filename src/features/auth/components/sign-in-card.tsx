@@ -1,11 +1,10 @@
-import React from "react";
-import Link from "next/link";
+"use client";
+
+import React, { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-
-import { FcGoogle } from "react-icons/fc";
-import { FaGithub } from "react-icons/fa";
+import { useRouter } from "next/navigation";
 
 import { DottedSeparator } from "@/components/dotted-separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,30 +18,40 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
-// Schema chỉ để validate UI
+import { doctorLogin } from "@/lib/api_auth";
+
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email."),
-  password: z
-    .string()
-    .min(8, "Minimum 8 characters")
-    .max(256, "Password is too long"),
+  password: z.string().min(8, "Minimum 8 characters").max(256, "Password is too long"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 export const SignInCard = () => {
+  const router = useRouter();
+  const [serverError, setServerError] = useState<string | null>(null);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
     mode: "onSubmit",
   });
 
-  const onSubmit = (values: FormValues) => {
-    // UI only
-    console.log("Sign in values:", values);
+  const onSubmit = async (values: FormValues) => {
+    setServerError(null);
+    try {
+      const data = await doctorLogin(values.email, values.password);
+
+      // lưu token (simple)
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("token_type", data.token_type);
+      localStorage.setItem("role", "doctor");
+
+      // redirect sang dashboard doctor (đổi path theo bạn)
+      router.push("/doctor");
+    } catch (err: any) {
+      setServerError(err?.message || "Login failed");
+    }
   };
 
   return (
@@ -58,19 +67,22 @@ export const SignInCard = () => {
 
         <CardContent className="p-7">
           <Form {...form}>
-            <form
-              noValidate
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4"
-            >
+            <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+              {serverError && (
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                  {serverError}
+                </div>
+              )}
+
               <FormField
                 name="email"
                 control={form.control}
-                render={({ }) => (
+                render={({ field }) => (
                   <FormItem>
                     <FormControl>
                       <Input
-                        // {...field}
+                        {...field}
                         type="email"
                         placeholder="Enter email address"
                         autoComplete="email"
@@ -84,11 +96,11 @@ export const SignInCard = () => {
               <FormField
                 name="password"
                 control={form.control}
-                render={({ }) => (
+                render={({ field }) => (
                   <FormItem>
                     <FormControl>
                       <Input
-                        // {...field}
+                        {...field}
                         type="password"
                         placeholder="Enter password"
                         autoComplete="current-password"
@@ -99,13 +111,8 @@ export const SignInCard = () => {
                 )}
               />
 
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                disabled={form.formState.isSubmitting}
-              >
-                Login
+              <Button type="submit" size="lg" className="w-full" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? "Logging in..." : "Login"}
               </Button>
             </form>
           </Form>
