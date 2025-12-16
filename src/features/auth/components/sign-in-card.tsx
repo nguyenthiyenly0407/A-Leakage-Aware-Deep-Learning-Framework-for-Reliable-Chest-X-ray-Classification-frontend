@@ -18,7 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
-import { doctorLogin } from "@/lib/api";
+import { doctorLogin } from "@/lib/api_auth";
 
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email."),

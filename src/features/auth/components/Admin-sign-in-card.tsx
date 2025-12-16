@@ -20,7 +20,7 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { adminLogin } from "@/lib/api";
+import { adminLogin } from "@/lib/api_auth";
 // Schema chỉ để validate UI
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email."),
