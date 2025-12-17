@@ -48,7 +48,7 @@ export const SignInCard = () => {
       localStorage.setItem("role", "doctor");
 
       // redirect sang dashboard doctor (đổi path theo bạn)
-      router.push("/doctor");
+      router.push("/dashboard");
     } catch (err: any) {
       setServerError(err?.message || "Login failed");
     }
