@@ -30,6 +30,150 @@ const mockPatients: PatientRow[] = [
     phone: "0835574717"
    
   },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
+   {
+    id: 2,
+    fullName: "Nguyen A",
+    gender: "Male",
+    birthYear: 2000,
+    phone: "0835574717"
+   
+  },
 ];
 
 export default function Patient() {
@@ -80,13 +224,13 @@ export default function Patient() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <LeftSidebar />
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <TopBar />
 
-        <main className="flex-1 p-6 bg-slate-50">
+        <main className="flex-1 p-6 bg-slate-50 overflow-y-auto">
           {/* Page header */}
           <div className="flex items-center justify-between mb-5">
             <div>
