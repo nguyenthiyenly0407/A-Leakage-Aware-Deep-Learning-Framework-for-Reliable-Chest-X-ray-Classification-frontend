@@ -22,6 +22,7 @@ const mockPatients: PatientRow[] = [
     phone: "0835574717",
     
   },
+  
   {
     id: 2,
     fullName: "Nguyen A",
@@ -109,32 +110,29 @@ export default function Patient() {
           <div className="rounded-xl border bg-white shadow-sm">
             <div className="p-5">
               <div className="flex items-center justify-between gap-4 flex-wrap">
-                {/* left tools (fake) */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-200">
-                    📋 Copy
+  
+                <div>
+                  <button className="flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                    <span>📋</span>
+                    <span>Copy List</span>
                   </button>
-                  <button className="rounded-lg bg-emerald-100 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-200">
-                    📗 Excel
+                </div>
+               <div className="flex items-center gap-2 mr-2 border-r pr-4 border-slate-200">
+                  <button className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors">
+                    <span>📗</span>
+                    <span className="hidden sm:inline">Excel</span>
                   </button>
-                  <button className="rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-700 hover:bg-rose-200">
-                    📕 PDF
+                  <button className="flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors">
+                    <span>📕</span>
+                    <span className="hidden sm:inline">PDF</span>
                   </button>
-                  <button className="rounded-lg bg-violet-100 px-3 py-2 text-sm text-violet-700 hover:bg-violet-200">
-                    🖨️ Print report
+                  <button className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors">
+                    <span>🖨️</span>
+                    <span className="hidden sm:inline">Print</span>
                   </button>
+                <div/>
                 </div>
 
-                {/* search box */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-600">Search:</span>
-                  <input
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    className="h-9 w-56 rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200"
-                    placeholder=""
-                  />
-                </div>
               </div>
 
               {/* Table */}
