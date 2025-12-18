@@ -3,28 +3,30 @@
 import { useMemo, useState, useEffect } from "react";
 import LeftSidebar from "@/features/sidebar/LeftSidebar";
 import TopBar from "@/features/sidebar/TopBar";
-// Import file api vừa tạo trong lib
-import { getPatients, createPatient, type Patient } from "@/lib/api_patient";
+// Import thêm updatePatient
+import { getPatients, createPatient, deletePatient, updatePatient, type Patient } from "@/lib/api_patient";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function PatientPage() {
   // --- STATE DỮ LIỆU ---
-  const [patients, setPatients] = useState<Patient[]>([]); // Data thật từ API
-  const [loading, setLoading] = useState(true); // Trạng thái đang tải
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // --- STATE UI ---
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isJustAdded, setIsJustAdded] = useState(false); // Cờ để nhảy trang cuối
 
-  // --- STATE FORM THÊM MỚI ---
+  // --- STATE FORM (Dùng chung cho cả Thêm và Sửa) ---
+  const [editingId, setEditingId] = useState<number | null>(null); // ✅ ID đang sửa (null = thêm mới)
   const [fullName, setFullName] = useState("");
-  const [gender, setGender] = useState<"Male" | "Female">("Male"); // Lưu ý: Backend bạn đang lưu "Male"/"Female" hay "Nam"/"Nữ"? Mình đang để theo Schema
+  const [gender, setGender] = useState<"Male" | "Female">("Male");
   const [birthYear, setBirthYear] = useState("2000");
   const [phone, setPhone] = useState("");
 
-  // 1. HÀM LOAD DATA TỪ API
+  // 1. LOAD DATA
   const loadData = async () => {
     try {
       setLoading(true);
@@ -32,22 +34,17 @@ export default function PatientPage() {
       setPatients(data);
     } catch (error) {
       console.error(error);
-      alert("Lỗi khi tải danh sách bệnh nhân!");
     } finally {
       setLoading(false);
     }
   };
 
-  // Gọi loadData khi component được mount
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // 2. LOGIC SEARCH & PHÂN TRANG (Client-side)
+  // 2. LOGIC FILTER & PAGINATION
   const filtered = useMemo(() => {
     const k = keyword.trim().toLowerCase();
     if (!k) return patients;
-    // Search trên các trường name_patient, phone_number, id_patient
     return patients.filter((p) =>
       [p.id_patient, p.name_patient, p.phone_number].some((x) =>
         String(x || "").toLowerCase().includes(k)
@@ -61,47 +58,95 @@ export default function PatientPage() {
     return filtered.slice(start, start + ITEMS_PER_PAGE);
   }, [filtered, currentPage]);
 
-  useEffect(() => {
-    setCurrentPage(1); // Reset về trang 1 khi search
-  }, [keyword]);
+  useEffect(() => { setCurrentPage(1); }, [keyword]);
 
-  // 3. XỬ LÝ SUBMIT FORM (GỌI API CREATE)
-  const handleSubmitAdd = async () => {
+  // Nhảy trang cuối khi thêm mới
+  useEffect(() => {
+    if (isJustAdded && patients.length > 0) {
+        const newTotalPages = Math.ceil(patients.length / ITEMS_PER_PAGE);
+        setCurrentPage(newTotalPages);
+        setIsJustAdded(false);
+    }
+  }, [patients, isJustAdded]);
+
+  // 3. ✅ HÀM CLICK NÚT BÚT CHÌ (EDIT)
+  const handleEditClick = (p: Patient) => {
+    setEditingId(p.id_patient); // Gán ID đang sửa
+    setFullName(p.name_patient);
+    setGender((p.gender as "Male" | "Female") || "Male");
+    setPhone(p.phone_number || "");
+    
+    // Lấy năm sinh từ chuỗi ngày (YYYY-MM-DD)
+    if (p.date_of_birth_patient) {
+        const year = new Date(p.date_of_birth_patient).getFullYear();
+        setBirthYear(String(year));
+    }
+    
+    setOpen(true); // Mở modal
+  };
+
+  // 4. ✅ HÀM SUBMIT FORM (Tự động chọn Thêm hoặc Sửa)
+  const handleSubmitForm = async () => {
     if (!fullName.trim()) {
       alert("Vui lòng nhập tên bệnh nhân");
       return;
     }
 
     try {
-      // Backend cần "YYYY-MM-DD". UI chỉ có năm => Mặc định lấy ngày 01/01
-      // Nếu sau này UI có chọn ngày tháng thì thay vào đây
-      const dobPayload = `${birthYear}-01-01`;
-
-      await createPatient({
+      const dobPayload = `${birthYear}-01-01`; // Giả định ngày 01/01
+      
+      const payload = {
         name_patient: fullName,
         date_of_birth_patient: dobPayload,
-        gender: gender, // "Male" hoặc "Female"
+        gender: gender,
         phone_number: phone || null,
-      });
+      };
 
-      alert("Thêm thành công!");
-      setOpen(false); // Đóng modal
-      resetForm();    // Xóa trắng form
-      loadData();     // Load lại danh sách mới nhất
+      if (editingId) {
+        // --- LOGIC SỬA (UPDATE) ---
+        await updatePatient(editingId, payload);
+        alert("Cập nhật thành công!");
+      } else {
+        // --- LOGIC THÊM MỚI (CREATE) ---
+        await createPatient(payload);
+        alert("Thêm mới thành công!");
+        setIsJustAdded(true); // Bật cờ để nhảy trang cuối
+      }
+
+      setOpen(false); 
+      resetForm();    
+      loadData();    
 
     } catch (err: any) {
       alert("Lỗi: " + err.message);
     }
   };
 
+  const handleDelete = async (id: number, name: string) => {
+    if (confirm(`Bạn có chắc chắn muốn xóa bệnh nhân: ${name}?`)) {
+      try {
+        await deletePatient(id);
+        alert("Đã xóa thành công!");
+        loadData();
+      } catch (error: any) {
+        alert("Lỗi khi xóa: " + error.message);
+      }
+    }
+  };
+
   const resetForm = () => {
+    setEditingId(null); // ✅ Reset ID về null để lần sau mở ra là thêm mới
     setFullName("");
     setGender("Male");
     setBirthYear("2000");
     setPhone("");
   };
 
-  // Helper tính tuổi hiển thị
+  const handleCloseModal = () => {
+      setOpen(false);
+      resetForm();
+  }
+
   const calculateAge = (dob: string) => {
     if (!dob) return "";
     const year = new Date(dob).getFullYear();
@@ -128,7 +173,7 @@ export default function PatientPage() {
               <p className="text-sm text-slate-500">Manage your patients</p>
             </div>
             <button
-              onClick={() => setOpen(true)}
+              onClick={() => { resetForm(); setOpen(true); }} // Reset form trước khi mở để đảm bảo là Thêm mới
               className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-white text-sm font-medium hover:bg-sky-700 shadow-sm transition-all active:scale-95"
             >
               <span className="text-lg leading-none">＋</span> Add New Patient
@@ -137,8 +182,6 @@ export default function PatientPage() {
 
           {/* Card Table */}
           <div className="rounded-xl border bg-white shadow-sm flex flex-col">
-            
-            {/* Toolbar: Export & Filter */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
                <button className="flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors">
                  <span>📋</span> Copy List
@@ -149,21 +192,21 @@ export default function PatientPage() {
                     <button className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100">PDF</button>
                     <button className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100">Print report</button>
                  </div>
-                 {/* Search Input */}
+                 <div className="relative">
+                    <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Search..." className="h-9 rounded-lg border border-slate-200 pl-3 pr-8 text-sm focus:border-sky-400 outline-none" />
+                    <span className="absolute right-2 top-2 text-slate-400">🔍</span>
+                 </div>
                </div>
             </div>
 
-            {/* Table Content */}
             <div className="overflow-x-auto min-h-[400px]">
               {loading ? (
-                <div className="flex h-64 items-center justify-center text-slate-400">
-                  Loading data...
-                </div>
+                <div className="flex h-64 items-center justify-center text-slate-400">Loading data...</div>
               ) : (
                 <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-600 font-medium">
                     <tr>
-                      <th className="px-5 py-3 border-b">ID</th>
+                      <th className="px-5 py-3 border-b">STT</th>
                       <th className="px-5 py-3 border-b">FULLNAME</th>
                       <th className="px-5 py-3 border-b">GENDER</th>
                       <th className="px-5 py-3 border-b">BIRTH YEAR</th>
@@ -172,11 +215,18 @@ export default function PatientPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {paginatedData.map((p) => (
+                    {paginatedData.map((p, index) => (
                       <tr key={p.id_patient} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-5 py-3 text-slate-700 font-medium">#{p.id_patient}</td>
+                        <td className="px-5 py-3 text-slate-700 font-medium">
+                            {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                        </td>
                         <td className="px-5 py-3">
-                          <span className="text-sky-600 font-medium cursor-pointer hover:underline">{p.name_patient}</span>
+                          <span 
+                            onClick={() => handleEditClick(p)} // Click vào tên cũng cho sửa luôn
+                            className="text-sky-600 font-medium cursor-pointer hover:underline"
+                          >
+                            {p.name_patient}
+                          </span>
                         </td>
                         <td className="px-5 py-3">{p.gender}</td>
                         <td className="px-5 py-3 text-slate-600">
@@ -185,83 +235,74 @@ export default function PatientPage() {
                         <td className="px-5 py-3 text-slate-600 font-mono">{p.phone_number || "--"}</td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                             <button className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600 flex items-center justify-center">✏️</button>
-                             <button className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 flex items-center justify-center">🗑️</button>
+                             
+                             {/* ✅ NÚT BÚT CHÌ (EDIT) */}
+                             <button 
+                                onClick={() => handleEditClick(p)}
+                                className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-sky-100 text-slate-500 hover:text-sky-600 flex items-center justify-center transition-colors"
+                             >
+                                ✏️
+                             </button>
+                             
+                             {/* ✅ NÚT THÙNG RÁC (DELETE) */}
+                             <button 
+                                onClick={() => handleDelete(p.id_patient, p.name_patient)}
+                                className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 flex items-center justify-center transition-colors"
+                             >
+                                🗑️
+                             </button>
                           </div>
                         </td>
                       </tr>
                     ))}
                     {paginatedData.length === 0 && (
-                       <tr>
-                         <td colSpan={6} className="py-12 text-center text-slate-400">No patients found.</td>
-                       </tr>
+                       <tr><td colSpan={6} className="py-12 text-center text-slate-400">No patients found.</td></tr>
                     )}
                   </tbody>
                 </table>
               )}
             </div>
 
-            {/* Pagination */}
             <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between">
               <span className="text-sm text-slate-500">
                  Showing page <span className="font-semibold text-slate-900">{currentPage}</span> of <span className="font-semibold text-slate-900">{totalPages || 1}</span>
               </span>
               <div className="flex gap-2">
-                 <button 
-                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                   disabled={currentPage === 1}
-                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                 >
-                   Back
-                 </button>
-                 <button 
-                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                   disabled={currentPage === totalPages || totalPages === 0}
-                   className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                 >
-                   Next
-                 </button>
+                 <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Back</button>
+                 <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
               </div>
             </div>
-
           </div>
         </main>
       </div>
 
-      {/* Modal Add Patient */}
+      {/* ✅ Modal Form (Dùng chung Add & Edit) */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
+           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleCloseModal} />
            <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl p-0 animate-in zoom-in-95 duration-200">
               <div className="px-6 py-4 border-b flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-slate-800">Add New Patient</h3>
-                  <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+                  {/* Đổi tiêu đề dựa vào editingId */}
+                  <h3 className="text-lg font-semibold text-slate-800">
+                      {editingId ? "Edit Patient Information" : "Add New Patient"}
+                  </h3>
+                  <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600">✕</button>
               </div>
               <div className="p-6 grid grid-cols-2 gap-5">
                   <div className="col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                      <input 
-                        value={fullName} onChange={e => setFullName(e.target.value)}
-                        className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none" 
-                        placeholder="Ex: Nguyen Van A"
-                      />
+                      <input value={fullName} onChange={e => setFullName(e.target.value)} className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none" placeholder="Ex: Nguyen Van A" />
                   </div>
                   <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Gender</label>
-                      <select 
-                        value={gender} onChange={e => setGender(e.target.value as any)}
-                        className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none"
-                      >
+                      <select value={gender} onChange={e => setGender(e.target.value as any)} className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none">
                           <option value="Male">Male</option>
                           <option value="Female">Female</option>
                       </select>
                   </div>
                   <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">Birth Year</label>
-                      <select 
-                        value={birthYear} onChange={e => setBirthYear(e.target.value)}
-                        className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none"
-                      >
+                      <select value={birthYear} onChange={e => setBirthYear(e.target.value)} className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none">
                           {Array.from({length: 80}, (_, i) => `${2025 - i}`).map(y => (
                               <option key={y} value={y}>{y}</option>
                           ))}
@@ -269,16 +310,15 @@ export default function PatientPage() {
                   </div>
                   <div className="col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-                      <input 
-                        value={phone} onChange={e => setPhone(e.target.value)}
-                        className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none" 
-                        placeholder="090..."
-                      />
+                      <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none" placeholder="090..." />
                   </div>
               </div>
               <div className="px-6 py-4 bg-slate-50 rounded-b-xl flex justify-end gap-3 border-t">
-                  <button onClick={() => setOpen(false)} className="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-200 text-sm font-medium">Cancel</button>
-                  <button onClick={handleSubmitAdd} className="px-5 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 text-sm font-medium">Create Profile</button>
+                  <button onClick={handleCloseModal} className="px-5 py-2 rounded-lg text-slate-600 hover:bg-slate-200 text-sm font-medium">Cancel</button>
+                  {/* Đổi text nút bấm */}
+                  <button onClick={handleSubmitForm} className="px-5 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 text-sm font-medium">
+                      {editingId ? "Save Changes" : "Create Profile"}
+                  </button>
               </div>
            </div>
         </div>

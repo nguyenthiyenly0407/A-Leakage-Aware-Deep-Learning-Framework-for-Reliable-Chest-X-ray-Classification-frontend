@@ -67,3 +67,35 @@ export async function createPatient(payload: PatientCreatePayload) {
 
   return data as Patient;
 }
+export async function updatePatient(id: number, payload: PatientCreatePayload) {
+  const token = localStorage.getItem("access_token");
+  const res = await fetch(`${API_BASE_URL}/patients/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) throw new Error("Failed to update patient");
+  return await res.json();
+}
+
+// Delete bệnh nhân
+export async function deletePatient(id: number) {
+  const token = localStorage.getItem("access_token");
+  const res = await fetch(`${API_BASE_URL}/patients/${id}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Failed to delete patient");
+  }
+  return true; // Xóa thành công
+}
