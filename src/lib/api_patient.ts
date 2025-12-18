@@ -24,15 +24,18 @@ export type PatientCreatePayload = {
 // --- API FUNCTIONS ---
 
 // Lấy danh sách bệnh nhân
-export async function getPatients() {
-  // Nếu có token thì lấy từ localStorage thêm vào header
+export async function getPatients(keyword: string = "") {
   const token = localStorage.getItem("access_token");
   
-  const res = await fetch(`${API_BASE_URL}/patients`, {
+  // Tạo URL: nếu có keyword thì thêm ?keyword=abc, không thì thôi
+  const url = keyword 
+    ? `${API_BASE_URL}/patients?keyword=${encodeURIComponent(keyword)}`
+    : `${API_BASE_URL}/patients`;
+
+  const res = await fetch(url, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
-      // Thêm Authorization nếu backend yêu cầu login mới xem được
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
@@ -99,3 +102,4 @@ export async function deletePatient(id: number) {
   }
   return true; // Xóa thành công
 }
+
