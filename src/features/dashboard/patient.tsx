@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import LeftSidebar from "@/features/sidebar/LeftSidebar";
 import TopBar from "@/features/sidebar/TopBar";
 import { getPatients, createPatient, deletePatient, updatePatient, type Patient } from "@/lib/api_patient";
@@ -15,6 +15,7 @@ const ITEMS_PER_PAGE = 10;
 
 export default function PatientPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlKeyword = searchParams.get("keyword") || "";
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -304,7 +305,12 @@ export default function PatientPage() {
                       <tr key={p.id_patient} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-5 py-3 text-slate-700 font-medium">{(currentPage - 1) * ITEMS_PER_PAGE + index + 1}</td>
                         <td className="px-5 py-3">
-                          <span onClick={() => handleEditClick(p)} className="text-sky-600 font-medium cursor-pointer hover:underline">{p.name_patient}</span>
+                          <span 
+                              onClick={() => router.push(`/dashboard/patient/${p.id_patient}`)}
+                              className="text-sky-600 font-medium cursor-pointer hover:underline"
+                          >
+                              {p.name_patient}
+                          </span>
                         </td>
                         <td className="px-5 py-3">{p.gender}</td>
                         <td className="px-5 py-3 text-slate-600">{getYear(p.date_of_birth_patient)} <span className="text-slate-300 mx-1">|</span> {calculateAge(p.date_of_birth_patient)}T</td>
