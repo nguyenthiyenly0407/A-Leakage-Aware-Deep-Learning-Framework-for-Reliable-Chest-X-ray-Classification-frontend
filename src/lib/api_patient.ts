@@ -48,6 +48,27 @@ export async function getPatients(keyword: string = "") {
   return data as Patient[];
 }
 
+// src/lib/api_patient.ts
+
+// ... (Giữ nguyên các hàm cũ getPatients, create, update...)
+
+// ✅ Thêm hàm này để lấy chi tiết 1 bệnh nhân
+export async function getPatientById(id: number) {
+  const token = localStorage.getItem("access_token");
+  const res = await fetch(`${API_BASE_URL}/patients/${id}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch patient detail");
+  }
+  return await res.json() as Patient;
+}
+
 // Thêm mới bệnh nhân
 export async function createPatient(payload: PatientCreatePayload) {
   const token = localStorage.getItem("access_token");

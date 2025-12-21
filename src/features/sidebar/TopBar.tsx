@@ -4,7 +4,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
-// Tọa độ mặc định (TP.HCM) phòng khi người dùng chặn định vị
+// Tọa độ mặc định (TP.HCM)
 const DEFAULT_LOCATION = {
   lat: 10.8231,
   long: 106.6297,
@@ -39,7 +39,6 @@ export default function TopBar() {
   const [time, setTime] = useState<Date | null>(null);
   const [weather, setWeather] = useState<{ temp: number; code: number } | null>(null);
   
-  // State lưu tọa độ (khởi tạo bằng mặc định trước)
   const [coords, setCoords] = useState(DEFAULT_LOCATION);
 
   const crumbs = useMemo(() => buildBreadcrumb(pathname), [pathname]);
@@ -61,26 +60,24 @@ export default function TopBar() {
     };
   }, []);
 
-  // 2. XIN QUYỀN VỊ TRÍ (GEOLOCATION)
+  // 2. XIN QUYỀN VỊ TRÍ
   useEffect(() => {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          // Thành công -> Cập nhật tọa độ thật
           setCoords({
             lat: position.coords.latitude,
             long: position.coords.longitude,
           });
         },
         (error) => {
-          console.warn("Không lấy được vị trí (User denied hoặc lỗi), dùng mặc định.", error);
-          // Không làm gì cả, giữ nguyên mặc định là TP.HCM
+          console.warn("Dùng vị trí mặc định do lỗi:", error);
         }
       );
     }
   }, []);
 
-  // 3. LẤY THỜI TIẾT (Chạy lại mỗi khi coords thay đổi)
+  // 3. LẤY THỜI TIẾT
   useEffect(() => {
     const fetchWeather = async () => {
       try {
@@ -88,7 +85,6 @@ export default function TopBar() {
           `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.long}&current_weather=true`
         );
         const data = await res.json();
-        
         if (data.current_weather) {
           setWeather({
             temp: data.current_weather.temperature,
@@ -101,12 +97,11 @@ export default function TopBar() {
     };
 
     fetchWeather();
-    // Refresh mỗi 30p
     const interval = setInterval(fetchWeather, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [coords]); // <-- Quan trọng: coords thay đổi thì gọi lại API
+  }, [coords]);
 
-  // Helper formats...
+  // ✅ FIX LỖI 2554: Thêm tham số (date: Date) vào định nghĩa hàm
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
       hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -119,6 +114,7 @@ export default function TopBar() {
     });
   };
 
+  // ✅ FIX LỖI SVG: Dùng camelCase (strokeLinecap, strokeLinejoin)
   const getWeatherInfo = (code: number) => {
     if (code === 0) return { label: "Sunny", icon: <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> };
     if ([1, 2, 3].includes(code)) return { label: "Cloudy", icon: <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg> };
@@ -144,11 +140,12 @@ export default function TopBar() {
         </div>
       </div>
 
-      {/* 2. CENTER: Auto Location Weather */}
+      {/* 2. CLOCK & WEATHER */}
       <div className="hidden md:flex flex-col items-center justify-center flex-1">
         {time ? (
           <>
             <div className="text-3xl font-bold text-slate-700 tracking-widest font-mono leading-none">
+              {/* Gọi hàm truyền biến time vào */}
               {formatTime(time)}
             </div>
             <div className="flex items-center gap-3 text-xs font-medium text-slate-500 mt-1 uppercase tracking-wide">
@@ -169,7 +166,7 @@ export default function TopBar() {
         )}
       </div>
 
-      {/* 3. RIGHT: Actions */}
+      {/* 3. ACTIONS */}
       <div className="flex items-center gap-6 min-w-[200px] justify-end">
         <button className="relative h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-sky-600 transition-all border border-transparent hover:border-slate-200">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
