@@ -1,98 +1,247 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import LeftSidebar from "@/features/sidebar/LeftSidebar";
 import TopBar from "@/features/sidebar/TopBar";
 
-// Mock data danh sách bệnh nhân để chọn nhanh
-const MOCK_PATIENTS = [
-  { id: 1, name: "Nguyen Van An", dob: "1990" },
-  { id: 2, name: "Tran Thi Bich", dob: "1995" },
-  { id: 3, name: "Le Hoang Nam", dob: "1988" },
+// 1. Định nghĩa kiểu dữ liệu
+interface Patient {
+  id_patient: number;
+  name_patient: string;
+  date_of_birth_patient: string;
+  gender?: string;
+  phone_number?: string;
+}
+
+// Danh sách bệnh giống Backend để bác sĩ chọn nếu AI sai
+const DISEASE_CLASSES = [
+    'Acne and Rosacea Photos', 
+    'Atopic Dermatitis Photos', 
+    'Eczema Photos',
+    'Melanoma Skin Cancer Nevi and Moles', 
+    'Nail Fungus and other Nail Disease',
+    'Psoriasis pictures Lichen Planus and related diseases',
+    'Tinea Ringworm Candidiasis and other Fungal Infections',
+    'Urticaria Hives', 
+    'Warts Molluscum and other Viral Infections'
 ];
 
 export default function AnalysisPage() {
   // --- STATE ---
-  const [selectedPatient, setSelectedPatient] = useState<string>("");
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<any>(null); // Lưu kết quả AI
+  const [isSaving, setIsSaving] = useState(false); // Loading khi save
+  
+  // State lưu kết quả AI gốc
+  const [aiResult, setAiResult] = useState<any>(null); 
+  
+  // State cho luồng bác sĩ xác nhận
+  const [analysisId, setAnalysisId] = useState<number | null>(null); // ID record trả về từ DB
+  const [confirmStatus, setConfirmStatus] = useState<'pending' | 'yes' | 'no'>('pending');
+  const [customDiagnosis, setCustomDiagnosis] = useState<string>("");
+  const [doctorNote, setDoctorNote] = useState<string>("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  // --- EFFECT: LẤY DANH SÁCH BỆNH NHÂN ---
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+           console.warn("Missing token");
+           return;
+        }
+        const res = await fetch("http://localhost:8000/patients", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setPatients(data);
+        }
+      } catch (error) {
+        console.error("Lỗi fetch API:", error);
+      }
+    };
+    fetchPatients();
+  }, [router]);
+
+  // --- COMPUTED STATE (QUAN TRỌNG) ---
+  // Tính toán hiển thị dựa trên AI hay Bác sĩ chọn
+  const displayResult = useMemo(() => {
+    if (!aiResult) return null;
+
+    // Nếu bác sĩ bảo SAI (No) và đã chọn bệnh khác -> Hiển thị bệnh đó + 100%
+    if (confirmStatus === 'no' && customDiagnosis) {
+        return {
+            diagnosis: customDiagnosis,
+            confidence: "100", // Hardcode 100% vì bác sĩ là trùm
+            isDoctorDecision: true, // Cờ để đổi màu UI nếu thích
+            heatmap_url: aiResult.heatmap_url,
+            details: aiResult.details,
+            advice: aiResult.advice
+        };
+    }
+
+    // Mặc định hiển thị kết quả AI
+    return {
+        ...aiResult,
+        isDoctorDecision: false
+    };
+  }, [aiResult, confirmStatus, customDiagnosis]);
 
   // --- HANDLERS ---
-  
-  // 1. Xử lý chọn ảnh
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
       setImagePreview(url);
-      setResult(null); // Reset kết quả cũ
+      // Reset toàn bộ state kết quả cũ
+      setAiResult(null);
+      setAnalysisId(null);
+      setConfirmStatus('pending');
+      setCustomDiagnosis("");
+      setDoctorNote("");
     }
   };
 
-  // 2. Giả lập gọi AI Model (Sau này thay bằng API thật)
-  const handleAnalyze = () => {
-    if (!selectedPatient) return alert("Please select a patient first!");
-    if (!imagePreview) return alert("Please upload an image!");
-
+  const handleAnalyze = async () => {
+    if (!selectedPatientId || !fileInputRef.current?.files?.[0]) return alert("Missing info!");
     setIsAnalyzing(true);
 
-    // Giả lập delay 2 giây như đang chạy model Python
-    setTimeout(() => {
-      setIsAnalyzing(false);
-      setResult({
-        diagnosis: "Eczema (Viêm da cơ địa)",
-        confidence: 94.5,
-        severity: "Moderate",
-        details: [
-            { label: "Eczema", score: 94.5 },
-            { label: "Psoriasis", score: 3.2 },
-            { label: "Acne", score: 1.1 },
-        ],
-        advice: "Recommend moisturizing creams and avoiding allergens. Consider mild corticosteroids."
+    try {
+      const token = localStorage.getItem("access_token");
+      const idDoctor = 1; // Fake ID doctor logic
+
+      const formData = new FormData();
+      formData.append("id_patient", selectedPatientId);
+      formData.append("id_doctor", idDoctor.toString());
+      formData.append("file", fileInputRef.current.files[0]);
+
+      const res = await fetch("http://localhost:8000/analysis/detect", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData,
       });
-    }, 2000);
+
+      if (!res.ok) throw new Error("Analysis failed");
+
+      const data = await res.json();
+      console.log("Full Response:", data);
+
+      // Lưu ID analysis để lát update
+      setAnalysisId(data.id_analysis);
+
+      // Parse top3
+      let top3 = [];
+      try {
+          top3 = JSON.parse(data.top3_json);
+      } catch(e) { top3 = [] }
+
+      // Set kết quả AI gốc
+      setAiResult({
+        diagnosis: data.ai_prediction,
+        confidence: data.ai_confidence.toFixed(1),
+        heatmap_url: `http://localhost:8000${data.heatmap_url}`,
+        details: top3.map((item: any) => ({
+            label: item.disease,
+            score: parseFloat(item.confidence)
+        })),
+        advice: data.note || "AI Suggestion based on visual features."
+      });
+      
+      // Auto fill note cũ nếu có
+      if (data.note) setDoctorNote(data.note);
+
+    } catch (error) {
+      alert("Error: " + error);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
-  // 3. Reset
   const handleReset = () => {
     setImagePreview(null);
-    setResult(null);
+    setAiResult(null);
+    setAnalysisId(null);
+    setConfirmStatus('pending');
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // HÀM MỚI: Gọi API update chẩn đoán bác sĩ
+  const handleSaveDiagnosis = async () => {
+    if (!analysisId) return;
+    
+    // Validate logic
+    if (confirmStatus === 'no' && !customDiagnosis) {
+        alert("Please select the correct diagnosis from the list.");
+        return;
+    }
+
+    setIsSaving(true);
+    try {
+        const token = localStorage.getItem("access_token");
+        const payload = {
+            confirm_ai: confirmStatus === 'yes' || confirmStatus === 'pending', // Pending coi như đồng ý tạm hoặc xử lý logic riêng
+            custom_diagnosis: confirmStatus === 'no' ? customDiagnosis : null,
+            note: doctorNote
+        };
+
+        const res = await fetch(`http://localhost:8000/analysis/${analysisId}/diagnose`, {
+            method: "PUT",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}` 
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Failed to save diagnosis");
+
+        alert("✅ Diagnosis saved to patient record successfully!");
+        
+        // Có thể reset hoặc redirect tùy lồng
+        // handleReset(); 
+
+    } catch (error) {
+        alert("Save failed: " + error);
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <LeftSidebar />
-
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar />
-
         <main className="flex-1 p-6 overflow-y-auto">
-          {/* Header */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-slate-800">AI Skin Analysis</h1>
-            <p className="text-slate-500">Upload dermatoscopic images for instant AI diagnosis assistance.</p>
+            <p className="text-slate-500">Dermatoscopic Image Analysis & Doctor Validation</p>
           </div>
 
-          {/* MAIN LAYOUT: GRID 2 CỘT */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full pb-10">
-            
-            {/* === CỘT TRÁI: INPUT (4 phần) === */}
+            {/* === CỘT TRÁI (INPUT) GIỮ NGUYÊN === */}
             <div className="lg:col-span-4 flex flex-col gap-6">
-              
-              {/* 1. Chọn Bệnh nhân */}
+               {/* ... (Phần chọn bệnh nhân và upload ảnh giữ nguyên như code cũ) ... */}
+               {/* 1. Chọn Bệnh nhân */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Select Patient</label>
                 <select 
                     className="w-full h-11 border-slate-200 border rounded-lg px-3 focus:ring-2 focus:ring-sky-200 outline-none text-slate-700 bg-slate-50"
-                    value={selectedPatient}
-                    onChange={(e) => setSelectedPatient(e.target.value)}
+                    value={selectedPatientId}
+                    onChange={(e) => setSelectedPatientId(e.target.value)}
                 >
                     <option value="">-- Choose a patient --</option>
-                    {MOCK_PATIENTS.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.dob})</option>
+                    {patients.map(p => (
+                        <option key={p.id_patient} value={p.id_patient}>
+                            {p.name_patient} ({p.date_of_birth_patient})
+                        </option>
                     ))}
                 </select>
               </div>
@@ -100,8 +249,6 @@ export default function AnalysisPage() {
               {/* 2. Upload Ảnh */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
                 <label className="block text-sm font-semibold text-slate-700 mb-3">Dermatoscopic Image</label>
-                
-                {/* Khu vực Dropzone */}
                 <div 
                     className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 transition-all ${
                         imagePreview ? "border-sky-300 bg-sky-50" : "border-slate-300 hover:border-sky-400 hover:bg-slate-50"
@@ -110,127 +257,164 @@ export default function AnalysisPage() {
                     {imagePreview ? (
                         <div className="relative w-full h-full min-h-[200px]">
                             <img src={imagePreview} alt="Preview" className="w-full h-full object-contain rounded-lg" />
-                            <button 
-                                onClick={handleReset}
-                                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 backdrop-blur-sm"
-                            >
-                                ✕
-                            </button>
+                            <button onClick={handleReset} className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1.5 hover:bg-black/70">✕</button>
                         </div>
                     ) : (
-                        <div 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-center cursor-pointer"
-                        >
-                            <div className="w-16 h-16 bg-sky-100 text-sky-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                            </div>
-                            <p className="text-sm font-medium text-slate-700">Click to upload or drag & drop</p>
-                            <p className="text-xs text-slate-400 mt-1">SVG, PNG, JPG (Max. 5MB)</p>
+                        <div onClick={() => fileInputRef.current?.click()} className="text-center cursor-pointer">
+                             {/* Icon upload... */}
+                             <p className="text-sm font-medium text-slate-700">Click to upload image</p>
                         </div>
                     )}
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                 </div>
-
-                {/* Nút Phân Tích */}
                 <button 
                     onClick={handleAnalyze}
                     disabled={isAnalyzing || !imagePreview}
-                    className={`mt-5 w-full py-3 rounded-lg font-semibold text-white shadow-lg shadow-sky-200 transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                        isAnalyzing || !imagePreview 
-                        ? "bg-slate-300 cursor-not-allowed shadow-none" 
-                        : "bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700"
+                    className={`mt-5 w-full py-3 rounded-lg font-semibold text-white shadow-lg shadow-sky-200 transition-all ${
+                        isAnalyzing || !imagePreview ? "bg-slate-300 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-700"
                     }`}
                 >
-                    {isAnalyzing ? (
-                        <>
-                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                            Processing AI Model...
-                        </>
-                    ) : (
-                        <>
-                            <span>✨</span> Run AI Diagnosis
-                        </>
-                    )}
+                    {isAnalyzing ? "Processing..." : "Run AI Diagnosis"}
                 </button>
               </div>
             </div>
 
-            {/* === CỘT PHẢI: OUTPUT KẾT QUẢ (8 phần) === */}
+            {/* === CỘT PHẢI: KẾT QUẢ & CONFIRMATION === */}
             <div className="lg:col-span-8">
-              {result ? (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {/* Header Kết quả */}
-                    <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-800">Analysis Results</h2>
-                            <p className="text-sm text-slate-500">AI Model v2.1 • {new Date().toLocaleTimeString()}</p>
-                        </div>
-                        <span className="px-4 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold border border-emerald-200">
-                            Completed
+              {displayResult ? (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    
+                    {/* Header */}
+                    <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h2 className="text-lg font-bold text-slate-800">Analysis Results</h2>
+                        <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${
+                            displayResult.isDoctorDecision 
+                            ? "bg-purple-100 text-purple-700 border-purple-200"
+                            : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                        }`}>
+                            {displayResult.isDoctorDecision ? "Doctor Overridden" : "AI Generated"}
                         </span>
                     </div>
 
                     <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 overflow-y-auto">
                         
-                        {/* Box 1: Chẩn đoán chính */}
-                        <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100">
+                        {/* BOX 1: KẾT QUẢ CHẨN ĐOÁN (Thay đổi theo confirmStatus) */}
+                        <div className={`col-span-1 md:col-span-2 p-6 rounded-2xl border ${
+                            displayResult.isDoctorDecision 
+                            ? "bg-gradient-to-br from-purple-50 to-white border-purple-100" 
+                            : "bg-gradient-to-br from-indigo-50 to-white border-indigo-100"
+                        }`}>
                             <div className="flex items-start gap-4">
-                                <div className="p-3 bg-indigo-600 rounded-xl text-white">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                                <div className={`p-3 rounded-xl text-white ${displayResult.isDoctorDecision ? "bg-purple-600" : "bg-indigo-600"}`}>
+                                    {/* Icon Doctor or Robot */}
+                                    {displayResult.isDoctorDecision ? (
+                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                    ) : (
+                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                    )}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-indigo-600 mb-1">Top Prediction</p>
-                                    <h3 className="text-3xl font-bold text-slate-800 mb-2">{result.diagnosis}</h3>
+                                    <p className={`text-sm font-medium mb-1 ${displayResult.isDoctorDecision ? "text-purple-600" : "text-indigo-600"}`}>
+                                        {displayResult.isDoctorDecision ? "Final Diagnosis (Doctor Verified)" : "AI Prediction"}
+                                    </p>
+                                    <h3 className="text-3xl font-bold text-slate-800 mb-2">{displayResult.diagnosis}</h3>
+                                    
                                     <div className="flex items-center gap-2">
                                         <div className="h-2.5 w-48 bg-slate-200 rounded-full overflow-hidden">
-                                            <div className="h-full bg-emerald-500" style={{ width: `${result.confidence}%` }}></div>
+                                            <div 
+                                                className={`h-full ${displayResult.isDoctorDecision ? "bg-purple-500" : "bg-emerald-500"}`} 
+                                                style={{ width: `${displayResult.confidence}%` }}
+                                            ></div>
                                         </div>
-                                        <span className="text-sm font-bold text-slate-700">{result.confidence}% Confidence</span>
+                                        <span className="text-sm font-bold text-slate-700">{displayResult.confidence}% Confidence</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Box 2: Biểu đồ xác suất */}
+                        {/* BOX 2: AI Breakdown (Chỉ hiện tham khảo, ko đổi) */}
                         <div className="space-y-4">
-                            <h4 className="font-semibold text-slate-800">Possibility Breakdown</h4>
+                            <h4 className="font-semibold text-slate-800">AI Probabilities</h4>
                             <div className="space-y-3">
-                                {result.details.map((item: any, idx: number) => (
-                                    <div key={idx}>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="text-slate-600">{item.label}</span>
-                                            <span className="font-medium text-slate-900">{item.score}%</span>
+                                {displayResult.details.map((item: any, idx: number) => (
+                                    <div key={idx} className="opacity-90">
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-slate-600 truncate max-w-[200px]">{item.label}</span>
+                                            <span className="font-medium text-slate-900">{item.score.toFixed(1)}%</span>
                                         </div>
-                                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                            <div 
-                                                className={`h-full rounded-full ${idx === 0 ? "bg-indigo-500" : "bg-slate-400"}`} 
-                                                style={{ width: `${item.score}%` }}
-                                            ></div>
+                                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-full bg-slate-400 rounded-full" style={{ width: `${item.score}%` }}></div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
+                            
+                            {/* Hiển thị ảnh Heatmap nếu có */}
+                            {displayResult.heatmap_url && (
+                                <div className="mt-4">
+                                    <p className="text-xs font-semibold text-slate-500 mb-2">Attention Heatmap</p>
+                                    <img src={displayResult.heatmap_url} className="w-full rounded-lg border border-slate-200" alt="Heatmap" />
+                                </div>
+                            )}
                         </div>
 
-                        {/* Box 3: Lời khuyên của AI */}
-                        <div>
-                             <h4 className="font-semibold text-slate-800 mb-3">AI Suggestions</h4>
-                             <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl text-orange-800 text-sm leading-relaxed">
-                                <p><strong>⚠️ Note:</strong> {result.advice}</p>
+                        {/* BOX 3: DOCTOR VALIDATION ZONE (PHẦN MỚI THÊM) */}
+                        <div className="flex flex-col gap-4">
+                             <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                                <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                    👨‍⚕️ Doctor Validation
+                                </h4>
+                                
+                                <p className="text-sm text-slate-600 mb-3">Is the AI diagnosis correct?</p>
+                                <div className="flex gap-3 mb-4">
+                                    <button 
+                                        onClick={() => setConfirmStatus('yes')}
+                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                                            confirmStatus === 'yes' 
+                                            ? "bg-emerald-100 border-emerald-500 text-emerald-800 ring-1 ring-emerald-500" 
+                                            : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        ✅ Yes, Correct
+                                    </button>
+                                    <button 
+                                        onClick={() => setConfirmStatus('no')}
+                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                                            confirmStatus === 'no' 
+                                            ? "bg-red-100 border-red-500 text-red-800 ring-1 ring-red-500" 
+                                            : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        ❌ No, Incorrect
+                                    </button>
+                                </div>
+
+                                {/* Nếu chọn No -> Hiện dropdown chọn Custom */}
+                                {confirmStatus === 'no' && (
+                                    <div className="animate-in slide-in-from-top-2 fade-in duration-300">
+                                        <label className="block text-xs font-bold text-red-600 mb-1">Select Correct Diagnosis:</label>
+                                        <select 
+                                            className="w-full border-red-300 border rounded-lg p-2 text-sm focus:ring-red-200 focus:border-red-500 outline-none"
+                                            value={customDiagnosis}
+                                            onChange={(e) => setCustomDiagnosis(e.target.value)}
+                                        >
+                                            <option value="">-- Select Disease --</option>
+                                            {DISEASE_CLASSES.map((disease) => (
+                                                <option key={disease} value={disease}>{disease}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                              </div>
-                             
-                             <div className="mt-6">
-                                <label className="block text-sm font-semibold text-slate-700 mb-2">Doctor's Notes (Final Conclusion)</label>
+
+                             {/* Ghi chú */}
+                             <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Doctor's Notes</label>
                                 <textarea 
                                     className="w-full h-24 border-slate-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-sky-200 outline-none resize-none"
-                                    placeholder="Enter your professional diagnosis here..."
+                                    placeholder="Clinical observation notes..."
+                                    value={doctorNote}
+                                    onChange={(e) => setDoctorNote(e.target.value)}
                                 ></textarea>
                              </div>
                         </div>
@@ -238,26 +422,32 @@ export default function AnalysisPage() {
 
                     {/* Footer Actions */}
                     <div className="mt-auto px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                        <button className="px-5 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 font-medium transition-colors">
+                        <button onClick={handleReset} className="px-5 py-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-white font-medium">
                             Discard
                         </button>
-                        <button className="px-5 py-2.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700 font-medium shadow-sm transition-colors">
-                            💾 Save to Patient History
+                        <button 
+                            onClick={handleSaveDiagnosis}
+                            disabled={isSaving || (confirmStatus === 'no' && !customDiagnosis)}
+                            className={`px-5 py-2.5 rounded-lg text-white font-medium shadow-sm flex items-center gap-2 ${
+                                isSaving || (confirmStatus === 'no' && !customDiagnosis)
+                                ? "bg-slate-400 cursor-not-allowed"
+                                : "bg-sky-600 hover:bg-sky-700"
+                            }`}
+                        >
+                            {isSaving ? "Saving..." : "💾 Save Final Diagnosis"}
                         </button>
                     </div>
                 </div>
               ) : (
-                // --- TRẠNG THÁI CHỜ (EMPTY STATE) ---
-                <div className="h-full bg-white rounded-xl shadow-sm border border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-400 p-10">
-                    <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                        <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                // Empty State
+                <div className="h-full bg-white rounded-xl shadow-sm border border-slate-200 border-dashed flex items-center justify-center text-slate-400">
+                    <div className="text-center">
+                        <h3 className="text-lg font-semibold text-slate-600">No Analysis Yet</h3>
+                        <p className="text-sm mt-1">Upload an image to start.</p>
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-600">No Analysis Yet</h3>
-                    <p className="max-w-xs text-center mt-2 text-sm">Select a patient and upload an image on the left panel to generate an AI diagnosis report.</p>
                 </div>
               )}
             </div>
-
           </div>
         </main>
       </div>
