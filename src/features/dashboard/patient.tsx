@@ -9,36 +9,49 @@ import { getPatients, createPatient, deletePatient, updatePatient, type Patient 
 // --- IMPORT THƯ VIỆN EXPORT ---
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable"; // 👈 Đã sửa import tại đây
+import autoTable from "jspdf-autotable";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function PatientPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // Lấy keyword từ URL (nếu có)
   const urlKeyword = searchParams.get("keyword") || "";
+  
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isJustAdded, setIsJustAdded] = useState(false);
+  
+  // State Form
   const [editingId, setEditingId] = useState<number | null>(null);
   const [fullName, setFullName] = useState("");
   const [gender, setGender] = useState<"Male" | "Female">("Male");
   const [birthYear, setBirthYear] = useState("2000");
   const [phone, setPhone] = useState("");
+  
+  // State Keyword (Init bằng urlKeyword)
   const [keyword, setKeyword] = useState(urlKeyword);
+
+  // --- HÀM LOAD DATA ---
   const loadData = async (searchKeyword: string) => {
     try {
       setLoading(true);
+      // Gọi API lấy danh sách (API backend đã có search, nhưng frontend filter lại cho chắc nếu cần client-side search)
       const data = await getPatients(searchKeyword);
+      
+      // Nếu Backend đã filter tốt rồi thì có thể bỏ đoạn filter client-side này đi
+      // Nhưng giữ lại cũng không sao, chỉ là filter kép
       const filteredData = data.filter((p: Patient) => {
-        const birthYear = new Date(p.date_of_birth_patient).getFullYear().toString();
+        const pBirthYear = new Date(p.date_of_birth_patient).getFullYear().toString();
+        const kw = searchKeyword.toLowerCase();
         return (
-          p.name_patient.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-          (p.gender && p.gender.toLowerCase().includes(searchKeyword.toLowerCase())) ||
-          birthYear.includes(searchKeyword) ||
-          (p.phone_number && p.phone_number.includes(searchKeyword))
+          p.name_patient.toLowerCase().includes(kw) ||
+          (p.gender && p.gender.toLowerCase().includes(kw)) ||
+          pBirthYear.includes(kw) ||
+          (p.phone_number && p.phone_number.includes(kw))
         );
       });
       setPatients(filteredData);
@@ -49,21 +62,26 @@ export default function PatientPage() {
     }
   };
 
+  // --- USE EFFECT: Chỉ cần 1 cái lắng nghe thay đổi của keyword ---
+  // Debounce search: Đợi 500ms sau khi ngừng gõ mới gọi API để đỡ spam request
   useEffect(() => {
-    loadData(urlKeyword);
-    setCurrentPage(1);
-  }, [urlKeyword]);
+    const timer = setTimeout(() => {
+        loadData(keyword);
+        setCurrentPage(1); // Reset về trang 1 khi search thay đổi
+    }, 500);
 
-  useEffect(() => {
-    loadData(keyword);
+    return () => clearTimeout(timer);
   }, [keyword]);
 
+
+  // Pagination Logic
   const totalPages = Math.ceil(patients.length / ITEMS_PER_PAGE);
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return patients.slice(start, start + ITEMS_PER_PAGE);
   }, [patients, currentPage]);
 
+  // Tự động chuyển đến trang cuối khi thêm mới
   useEffect(() => {
     if (isJustAdded && patients.length > 0) {
         const newTotalPages = Math.ceil(patients.length / ITEMS_PER_PAGE);
@@ -72,6 +90,7 @@ export default function PatientPage() {
     }
   }, [patients, isJustAdded]);
 
+  // --- FORM HANDLERS ---
   const handleEditClick = (p: Patient) => {
     setEditingId(p.id_patient);
     setFullName(p.name_patient);
@@ -108,7 +127,10 @@ export default function PatientPage() {
       }
       setOpen(false); 
       resetForm();    
-      loadData(urlKeyword); 
+      
+      // 🔥 SỬA QUAN TRỌNG Ở ĐÂY: Gọi loadData với (keyword) hiện tại, KHÔNG dùng urlKeyword cũ
+      loadData(keyword); 
+
     } catch (err: any) {
       alert("Lỗi: " + err.message);
     }
@@ -119,7 +141,8 @@ export default function PatientPage() {
       try {
         await deletePatient(id);
         alert("Đã xóa thành công!");
-        loadData(urlKeyword);
+        // 🔥 SỬA: Gọi loadData với keyword hiện tại
+        loadData(keyword);
       } catch (error: any) {
         alert("Lỗi khi xóa: " + error.message);
       }
@@ -139,9 +162,7 @@ export default function PatientPage() {
       resetForm();
   }
 
-  // --- 🔥 CHỨC NĂNG EXPORT DỮ LIỆU ---
-
-  // 1. Export Excel (Giữ nguyên)
+  // --- EXPORT FUNCTIONS ---
   const handleExportExcel = () => {
     const exportData = patients.map((p, index) => ({
       "No.": index + 1,
@@ -158,12 +179,9 @@ export default function PatientPage() {
     XLSX.writeFile(workbook, "Patients_List.xlsx");
   };
 
-  // 2. Export PDF (✅ ĐÃ FIX)
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    
     doc.text("Patients List Report", 14, 22);
-    
     const tableColumn = ["No.", "Full Name", "Gender", "Birth Year", "Phone"];
     const tableRows = patients.map((p, index) => [
       index + 1,
@@ -172,72 +190,29 @@ export default function PatientPage() {
       new Date(p.date_of_birth_patient).getFullYear(),
       p.phone_number || "--",
     ]);
-
-    // Sử dụng autoTable như một hàm độc lập
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 30,
-    });
-
+    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 30 });
     doc.save("Patients_List.pdf");
   };
 
-  // 3. Print Report (Giữ nguyên)
   const handlePrint = () => {
     const printContent = `
       <html>
-        <head>
-          <title>Print Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { text-align: center; color: #333; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
-            th { background-color: #f2f2f2; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-          </style>
-        </head>
+        <head><title>Print Report</title><style>body{font-family:Arial;padding:20px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:8px}th{background-color:#f2f2f2}</style></head>
         <body>
           <h1>Patients List Report</h1>
-          <p>Date: ${new Date().toLocaleDateString()}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>No.</th>
-                <th>Full Name</th>
-                <th>Gender</th>
-                <th>Birth Year</th>
-                <th>Phone</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${patients.map((p, index) => `
-                <tr>
-                  <td>${index + 1}</td>
-                  <td>${p.name_patient}</td>
-                  <td>${p.gender}</td>
-                  <td>${new Date(p.date_of_birth_patient).getFullYear()}</td>
-                  <td>${p.phone_number || "--"}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+          <table><thead><tr><th>No.</th><th>Name</th><th>Gender</th><th>Year</th><th>Phone</th></tr></thead><tbody>
+            ${patients.map((p, i) => `<tr><td>${i+1}</td><td>${p.name_patient}</td><td>${p.gender}</td><td>${new Date(p.date_of_birth_patient).getFullYear()}</td><td>${p.phone_number||"--"}</td></tr>`).join('')}
+          </tbody></table>
           <script>window.print();</script>
         </body>
-      </html>
-    `;
-    const printWindow = window.open('', '', 'height=600,width=800');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-    }
+      </html>`;
+    const w = window.open('', '', 'height=600,width=800');
+    if (w) { w.document.write(printContent); w.document.close(); }
   };
 
   const calculateAge = (dob: string) => {
     if (!dob) return "";
-    const year = new Date(dob).getFullYear();
-    return new Date().getFullYear() - year;
+    return new Date().getFullYear() - new Date(dob).getFullYear();
   };
   
   const getYear = (dob: string) => {
@@ -272,7 +247,8 @@ export default function PatientPage() {
                     <button onClick={handleExportPDF} className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 transition-colors">PDF</button>
                     <button onClick={handlePrint} className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors">Print report</button>
                  </div>
-                                  {/* ✅ Ô SEARCH INPUT CẬP NHẬT */}
+                 
+                 {/* Ô INPUT SEARCH */}
                  <div className="relative">
                     <input 
                         value={keyword} 
