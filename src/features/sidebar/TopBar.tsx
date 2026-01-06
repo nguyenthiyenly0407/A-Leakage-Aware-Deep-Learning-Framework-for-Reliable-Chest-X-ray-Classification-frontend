@@ -18,13 +18,13 @@ function buildBreadcrumb(pathname: string) {
     ];
   }
   if (pathname.includes("/analysis")) {
-    return [{ label: "Dashboard", href: "/dashboard" }, { label: "AI Analysis" }];
+    return [{ label: "Analysis", href: "/analysis" }, { label: "AI Analysis" }];
   }
   if (pathname.includes("/history")) {
-    return [{ label: "Dashboard", href: "/dashboard" }, { label: "History" }];
+    return [{ label: "History", href: "/history" }, { label: "History" }];
   }
   if (pathname.includes("/chart")) {
-    return [{ label: "Dashboard", href: "/dashboard" }, { label: "Statistics" }];
+    return [{ label: "Chart", href: "/chart" }, { label: "Chart" }];
   }
   return [{ label: "Patients management", href: "/dashboard" }];
 }
