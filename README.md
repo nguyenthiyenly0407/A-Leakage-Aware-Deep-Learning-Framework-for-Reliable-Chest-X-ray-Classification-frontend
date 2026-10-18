@@ -6,7 +6,7 @@
 
 > **Authors:** Ly Yen Nguyen-Thi, Linh To Tran, Thien B. Nguyen-Tat
 > **Institution:** University of Information Technology, VNU-HCM
-DOI: 10.1109/mapr72750.2026.11685789
+> **DOI:** 10.1109/mapr72750.2026.11685789
 
 ## Overview:
 This repository contains the implementation of a deep learning framework designed for the reliable multi-class classification of Chest X-rays (CXR). Our work addresses two critical issues in medical image analysis: **data leakage** and **model interpretability**.
