@@ -1,5 +1,5 @@
 # A Leakage-Aware Deep Learning Framework for Reliable Chest X-ray Classification 
-*Conference paper (MAPR 2026, Scopus-indexed)
+*Conference paper (MAPR 2026, Scopus-indexed)*
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.x-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
